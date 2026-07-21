@@ -1,8 +1,8 @@
 import requests
 from bs4 import BeautifulSoup
 from typing import List
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.schema import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_core.documents import Document
 from app.core.logging_config import get_logger, log_event, log_error
 from langfuse import observe
 from dotenv import load_dotenv
@@ -28,17 +28,23 @@ def load_think_python() -> str:
             response = requests.get(url, timeout=30)
             response.raise_for_status()
 
-            soup = BeautifulSoup(response.content, 'html.parser')
+            soup = BeautifulSoup(response.content, "html.parser")
 
             # Extract main content (remove navigation, headers, etc.)
-            main_content = soup.find('main') or soup.find('div', class_='content') or soup.body
+            main_content = (
+                soup.find("main") or soup.find("div", class_="content") or soup.body
+            )
             if main_content:
-                text = main_content.get_text(strip=True, separator=' ')
+                text = main_content.get_text(strip=True, separator=" ")
                 all_content.append(f"Chapter: {chapter}\n\n{text}")
                 log_event(logger, "chapter_loaded", f"Loaded chapter", chapter=chapter)
 
         except Exception as e:
-            log_error(logger, e, {"operation": "load_think_python_chapter", "chapter": chapter})
+            log_error(
+                logger,
+                e,
+                {"operation": "load_think_python_chapter", "chapter": chapter},
+            )
             continue
 
     return "\n\n".join(all_content)
@@ -55,18 +61,19 @@ def load_pep8() -> str:
         response = requests.get(url, timeout=30)
         response.raise_for_status()
 
-        soup = BeautifulSoup(response.content, 'html.parser')
+        soup = BeautifulSoup(response.content, "html.parser")
 
         # PEP 8 content is in the main section
-        main_content = soup.find('section', id='pep-content') or soup.find('div', class_='section')
+        main_content = soup.find("section", id="pep-content") or soup.find(
+            "div", class_="section"
+        )
         if main_content:
-            text = main_content.get_text(strip=True, separator=' ')
+            text = main_content.get_text(strip=True, separator=" ")
             log_event(logger, "pep8_loaded", "PEP 8 loaded successfully")
             return text
         else:
             logger.warning(
-                "PEP 8 content not found",
-                extra={"event_type": "pep8_content_missing"}
+                "PEP 8 content not found", extra={"event_type": "pep8_content_missing"}
             )
             return ""
 
@@ -88,11 +95,11 @@ class DocumentService:
     def chunk_text(self, text: str, source: str) -> List[Document]:
         """Split text into chunks"""
         log_event(
-            self.logger, 
-            "text_chunking_started", 
+            self.logger,
+            "text_chunking_started",
             "Starting text chunking",
             source=source,
-            text_length=len(text)
+            text_length=len(text),
         )
         chunks = self.text_splitter.split_text(text)
         documents = []
@@ -100,16 +107,16 @@ class DocumentService:
         for i, chunk in enumerate(chunks):
             doc = Document(
                 page_content=chunk,
-                metadata={"source": source, "chunk_id": i, "total_chunks": len(chunks)}
+                metadata={"source": source, "chunk_id": i, "total_chunks": len(chunks)},
             )
             documents.append(doc)
 
         log_event(
-            self.logger, 
-            "text_chunking_completed", 
+            self.logger,
+            "text_chunking_completed",
             "Text chunking completed",
             source=source,
-            chunks_created=len(chunks)
+            chunks_created=len(chunks),
         )
         return documents
 
@@ -130,9 +137,9 @@ class DocumentService:
             all_documents.extend(pep8_docs)
 
         log_event(
-            self.logger, 
-            "document_loading_completed", 
+            self.logger,
+            "document_loading_completed",
             "All documents loaded",
-            total_documents=len(all_documents)
+            total_documents=len(all_documents),
         )
         return all_documents

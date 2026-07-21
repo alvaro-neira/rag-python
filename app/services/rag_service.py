@@ -1,5 +1,5 @@
 from typing import Dict, Any
-from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from app.services.document_service import DocumentService
 from app.services.embedding_service import EmbeddingService
 from app.services.vector_store import VectorStore
@@ -41,17 +41,16 @@ class RAGService:
         self.logger = get_logger("rag_service")
 
         # Initialize LLM
-        self.llm = ChatOpenAI(
-            model="gpt-3.5-turbo",
+        self.llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
             temperature=0.1,
-            openai_api_key=os.getenv("OPENAI_API_KEY")
         )
 
         # Initialize Langfuse
         self.langfuse = Langfuse(
             public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
             secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
-            host=os.getenv("LANGFUSE_HOST")
+            host=os.getenv("LANGFUSE_HOST"),
         )
 
     @observe()
@@ -78,38 +77,35 @@ class RAGService:
             result = {
                 "status": "success",
                 "total_documents": len(documents),
-                "sources": stats['sources'],
-                "message": f"Successfully ingested {len(documents)} documents"
+                "sources": stats["sources"],
+                "message": f"Successfully ingested {len(documents)} documents",
             }
 
             # Record metrics
             metrics_recorder.record_document_ingestion(
                 duration_seconds=total_duration,
                 documents_count=len(documents),
-                success=True
+                success=True,
             )
-            metrics_recorder.update_vector_store_size(stats['total_documents'])
+            metrics_recorder.update_vector_store_size(stats["total_documents"])
 
             log_event(
-                self.logger, 
-                "ingestion_completed", 
+                self.logger,
+                "ingestion_completed",
                 "Document ingestion completed",
-                total_documents=result['total_documents'],
-                sources=result['sources'],
-                embedding_duration_seconds=embedding_duration
+                total_documents=result["total_documents"],
+                sources=result["sources"],
+                embedding_duration_seconds=embedding_duration,
             )
             return result
 
         except Exception as e:
             total_duration = time.time() - start_time
             metrics_recorder.record_document_ingestion(
-                duration_seconds=total_duration,
-                documents_count=0,
-                success=False
+                duration_seconds=total_duration, documents_count=0, success=False
             )
             metrics_recorder.record_error(
-                error_type=type(e).__name__,
-                operation="document_ingestion"
+                error_type=type(e).__name__, operation="document_ingestion"
             )
             log_error(self.logger, e, {"operation": "document_ingestion"})
             raise
@@ -119,11 +115,7 @@ class RAGService:
         """Answer a question using RAG with full tracing"""
         start_time = time.time()
         log_event(
-            self.logger, 
-            "query_started", 
-            "Processing RAG query",
-            question=question,
-            k=k
+            self.logger, "query_started", "Processing RAG query", question=question, k=k
         )
 
         try:
@@ -136,13 +128,11 @@ class RAGService:
             if not search_results:
                 duration = time.time() - start_time
                 metrics_recorder.record_rag_query(
-                    duration_seconds=duration,
-                    sources_count=0,
-                    success=True
+                    duration_seconds=duration, sources_count=0, success=True
                 )
                 return {
                     "answer": "I couldn't find any relevant information to answer your question.",
-                    "sources": []
+                    "sources": [],
                 }
 
             # Prepare context from search results
@@ -150,13 +140,17 @@ class RAGService:
             sources = []
 
             for i, result in enumerate(search_results):
-                context_chunks.append(result['text'])
-                sources.append({
-                    "page": result['metadata'].get('chunk_id', i),
-                    "text": result['text'][:200] + "..." if len(result['text']) > 200 else result['text'],
-                    "source": result['metadata'].get('source', 'unknown'),
-                    "distance": result['distance']
-                })
+                context_chunks.append(result["text"])
+                sources.append(
+                    {
+                        "page": result["metadata"].get("chunk_id", i),
+                        "text": result["text"][:200] + "..."
+                        if len(result["text"]) > 200
+                        else result["text"],
+                        "source": result["metadata"].get("source", "unknown"),
+                        "distance": result["distance"],
+                    }
+                )
 
             # Create prompt for LLM
             context = "\n\n".join(context_chunks)
@@ -166,45 +160,35 @@ class RAGService:
             answer = self._generate_llm_response(prompt)
 
             duration = time.time() - start_time
-            result = {
-                "answer": answer,
-                "sources": sources
-            }
+            result = {"answer": answer, "sources": sources}
 
             # Record metrics
             metrics_recorder.record_rag_query(
-                duration_seconds=duration,
-                sources_count=len(sources),
-                success=True
+                duration_seconds=duration, sources_count=len(sources), success=True
             )
 
             log_event(
-                self.logger, 
-                "query_completed", 
+                self.logger,
+                "query_completed",
                 "RAG query processing completed",
                 question=question,
                 answer_length=len(answer),
                 sources_found=len(sources),
-                context_chunks=len(context_chunks)
+                context_chunks=len(context_chunks),
             )
             return result
 
         except Exception as e:
             duration = time.time() - start_time
             metrics_recorder.record_rag_query(
-                duration_seconds=duration,
-                sources_count=0,
-                success=False
+                duration_seconds=duration, sources_count=0, success=False
             )
             metrics_recorder.record_error(
-                error_type=type(e).__name__,
-                operation="rag_query"
+                error_type=type(e).__name__, operation="rag_query"
             )
-            log_error(self.logger, e, {
-                "operation": "rag_query",
-                "question": question,
-                "k": k
-            })
+            log_error(
+                self.logger, e, {"operation": "rag_query", "question": question, "k": k}
+            )
             raise
 
     @observe(name="llm_inference")
