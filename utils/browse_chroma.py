@@ -1,9 +1,14 @@
+import os
+
 import chromadb
 from dotenv import load_dotenv
 
 load_dotenv()
 
-CHROMA_DB_PATH = "../data/chroma_db"
+# Anchor the DB path to the repo root (parent of this file's utils/ dir),
+# so the script works no matter which directory it's launched from.
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CHROMA_DB_PATH = os.path.join(_REPO_ROOT, "data", "chroma_db")
 
 
 def browse_chroma_data():
